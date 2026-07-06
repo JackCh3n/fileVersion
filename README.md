@@ -9,6 +9,8 @@
 支持 Win7 / Win10 / Win11，支持中文路径，支持中文/英文/数字用户名（gm、zhangshan、张德顺……），
 按当前用户 `%APPDATA%` / `%LOCALAPPDATA%` 自动解析，无需管理员权限。
 
+> 文件操作（copy / move）**成功后不弹窗**（静默完成），仅在**失败**时弹出错误提示。
+
 ---
 
 ## 安装（每个用户只需一次）
@@ -23,8 +25,8 @@ fileversion.exe install
 
 1. 把 `fileversion.exe` 复制到 `%LOCALAPPDATA%\FileVersion\`（当前用户专属，无需管理员）。
 2. 在 `%APPDATA%\Microsoft\Windows\SendTo` 下创建两个快捷方式：
-   - `复制并加版本号(FileVersion).lnk` → 执行 `copy`
-   - `重命名加版本号(FileVersion).lnk` → 执行 `move`
+   - `FileCopy.lnk` → 执行 `copy`（复制并加版本号）
+   - `FileMove.lnk` → 执行 `move`（重命名加版本号）
 
 > 不同用户各自运行一次 `install` 即可，互不干扰。
 
@@ -32,8 +34,19 @@ fileversion.exe install
 
 1. 在资源管理器里**右键文件**（可多选）→ **发送到**
 2. 选择：
-   - **复制并加版本号(FileVersion)**：生成一份带版本号的新副本，原文件不动。
-   - **重命名加版本号(FileVersion)**：直接把原文件改名为带版本号的名字；若原本已有 `V.2026_0706_113500`，则替换为新的时间戳。
+   - **FileCopy**：生成一份带版本号的新副本，原文件不动。
+   - **FileMove**：直接把原文件改名为带版本号的名字；若原本已有 `V.2026_0706_113500`，则替换为新的时间戳。
+
+## 卸载
+
+```bat
+fileversion.exe uninstall
+```
+
+会自动移除：
+- `%LOCALAPPDATA%\FileVersion\` 安装目录
+- `%APPDATA%\Microsoft\Windows\SendTo\` 下的 `FileCopy.lnk` 与 `FileMove.lnk`
+  （同时兼容清理旧版中文名称的快捷方式）
 
 ## 手动编译
 
@@ -49,17 +62,12 @@ build.bat
 
 ```bat
 fileversion.exe install                 # 安装到本用户 + 创建“发送到”菜单
+fileversion.exe uninstall               # 卸载，移快捷方式与安装目录
 fileversion.exe copy  "报告.docx"       # 复制并加版本后缀
 fileversion.exe move  "报告.docx"       # 重命名并加版本后缀（已存在则更新）
 ```
 
-可一次传入多个文件，会逐个处理并给出汇总提示。
-
-## 卸载
-
-删除以下两处即可，无任何残留：
-- `%LOCALAPPDATA%\FileVersion\`
-- `%APPDATA%\Microsoft\Windows\SendTo\` 下两个 `*(FileVersion).lnk`
+可一次传入多个文件，会逐个处理；仅当有文件失败时才弹窗汇总。
 
 ## 关于时间戳精度
 

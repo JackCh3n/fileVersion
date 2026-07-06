@@ -112,10 +112,10 @@ func TestCopyAndMove(t *testing.T) {
 func TestCreateShortcut(t *testing.T) {
 	sendTo := t.TempDir()
 	target := `C:\Program Files\FileVersion\fileversion.exe`
-	if err := createShortcut(sendTo, "复制并加版本号(FileVersion).lnk", target, "copy"); err != nil {
+	if err := createShortcut(sendTo, "FileCopy.lnk", target, "copy"); err != nil {
 		t.Fatalf("createShortcut: %v", err)
 	}
-	lnk := filepath.Join(sendTo, "复制并加版本号(FileVersion).lnk")
+	lnk := filepath.Join(sendTo, "FileCopy.lnk")
 	info, err := os.Stat(lnk)
 	if err != nil {
 		t.Fatalf("快捷方式未生成: %v", err)

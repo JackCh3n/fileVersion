@@ -3,13 +3,12 @@
 // fileversion —— 文件“发送到”小工具
 //
 // 功能：
-//   copy  复制文件，并在文件名后追加版本后缀 V.YYYY_MMDD_HHMM
+//   copy  复制文件，并在文件名后追加版本后缀 V.YYYY_MMDD_HHMMSS
 //   move  重命名文件，追加版本后缀（若已存在则更新该后缀）
-//   install  安装到当前用户，并在“发送到”菜单创建两个快捷方式
+//   install  安装到当前用户，并在“发送到”菜单创建 FileCopy / FileMove 两个快捷方式
+//   uninstall  卸载，移除快捷方式与安装目录
 //
-// 版本后缀示例：V.2026_0706_1135
-// 时间戳精确到“分”（与示例一致）。如需精确到“秒”，把 versionSuffix 中的
-// time.Format("2006_0102_1504") 改为 time.Format("2006_0102_150405") 即可。
+// 版本后缀示例：V.2026_0706_113500（精确到秒）
 package main
 
 import (
@@ -129,6 +128,12 @@ const (
 	mbIconError = 0x00000010
 )
 
+// “发送到”菜单中的快捷方式名称
+const (
+	linkCopy = "FileCopy.lnk"
+	linkMove = "FileMove.lnk"
+)
+
 func msgBox(title, text string) {
 	procMessageBoxW.Call(
 		0,
@@ -177,18 +182,18 @@ func doInstall() error {
 		return err
 	}
 
-	if err := createShortcut(sendTo, "复制并加版本号(FileVersion).lnk", destExe, "copy"); err != nil {
+	if err := createShortcut(sendTo, linkCopy, destExe, "copy"); err != nil {
 		return err
 	}
-	if err := createShortcut(sendTo, "重命名加版本号(FileVersion).lnk", destExe, "move"); err != nil {
+	if err := createShortcut(sendTo, linkMove, destExe, "move"); err != nil {
 		return err
 	}
 
 	msgBox("FileVersion 安装完成",
 		"已安装到：\n"+destExe+
 			"\n\n右键文件 → 发送到 中已出现：\n"+
-			"• 复制并加版本号(FileVersion)\n"+
-			"• 重命名加版本号(FileVersion)")
+			"• FileCopy（复制并加版本号）\n"+
+			"• FileMove（重命名加版本号）")
 	return nil
 }
 
@@ -223,6 +228,45 @@ func createShortcut(sendTo, name, target, args string) error {
 	return cmd.Run()
 }
 
+// doUninstall 卸载：删除本用户 SendTo 中的快捷方式与安装目录。
+func doUninstall() error {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		appData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
+	}
+	sendTo := filepath.Join(appData, "Microsoft", "Windows", "SendTo")
+
+	// 同时清理新旧两种快捷方式名称，避免旧版本残留
+	links := []string{
+		filepath.Join(sendTo, linkCopy),
+		filepath.Join(sendTo, linkMove),
+		filepath.Join(sendTo, "复制并加版本号(FileVersion).lnk"),
+		filepath.Join(sendTo, "重命名加版本号(FileVersion).lnk"),
+	}
+	var errs []string
+	for _, l := range links {
+		if err := os.Remove(l); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, l+": "+err.Error())
+		}
+	}
+
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+	}
+	installDir := filepath.Join(localAppData, "FileVersion")
+	if err := os.RemoveAll(installDir); err != nil {
+		errs = append(errs, installDir+": "+err.Error())
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("部分清理失败：\n%s", strings.Join(errs, "\n"))
+	}
+	msgBox("FileVersion 卸载完成",
+		"已移除：\n• SendTo 中的 FileCopy / FileMove 快捷方式\n• 安装目录 "+installDir)
+	return nil
+}
+
 // ---- 入口 ----
 
 func main() {
@@ -235,10 +279,11 @@ func main() {
 	if len(os.Args) < 2 {
 		msgBox("FileVersion 使用说明",
 			"用法：\n"+
-				"  fileversion.exe install        安装到本用户并创建“发送到”菜单\n"+
-				"  fileversion.exe copy  <文件>   复制文件并加版本后缀\n"+
-				"  fileversion.exe move  <文件>   重命名文件加版本后缀（已存在则更新）\n\n"+
-				"安装后，右键文件 → 发送到 即可使用，支持一次选中多个文件。")
+				"  fileversion.exe install          安装到本用户并创建“发送到”菜单\n"+
+				"  fileversion.exe uninstall        卸载（移除快捷方式与安装目录）\n"+
+				"  fileversion.exe copy  <文件>     复制文件并加版本后缀\n"+
+				"  fileversion.exe move  <文件>     重命名文件加版本后缀（已存在则更新）\n\n"+
+				"安装后，右键文件 → 发送到 即可使用（FileCopy / FileMove），支持多文件。")
 		return
 	}
 
@@ -249,6 +294,11 @@ func main() {
 	case "install":
 		if err := doInstall(); err != nil {
 			msgBoxErr("FileVersion 安装失败", err.Error())
+		}
+		return
+	case "uninstall":
+		if err := doUninstall(); err != nil {
+			msgBoxErr("FileVersion 卸载失败", err.Error())
 		}
 		return
 	case "copy", "move":
@@ -272,13 +322,12 @@ func main() {
 				ok++
 			}
 		}
-		if fail == 0 {
-			msgBox("FileVersion 完成", fmt.Sprintf("成功处理 %d 个文件。", ok))
-		} else {
+		// 成功时静默，不弹窗；仅在出现失败时提示
+		if fail > 0 {
 			msgBoxErr("FileVersion 完成（有失败）",
 				fmt.Sprintf("成功 %d，失败 %d：\n\n%s", ok, fail, strings.Join(errs, "\n")))
 		}
 	default:
-		msgBox("FileVersion", "未知命令："+mode+"\n请使用 install / copy / move。")
+		msgBox("FileVersion", "未知命令："+mode+"\n请使用 install / uninstall / copy / move。")
 	}
 }
