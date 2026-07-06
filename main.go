@@ -25,8 +25,10 @@ import (
 	"unsafe"
 )
 
-// 已存在的版本后缀（用于 move 时更新）。例如 V.2026_0706_113500（精确到秒）
-var reVersion = regexp.MustCompile(`(V\.\d{4}_\d{4}_\d{6})$`)
+// 版本后缀正则。例如 V.2026_0706_113500（精确到秒）。
+// 注意：不匹配行尾 $，以便识别“文件名中间”已存在的版本号
+// （如 Windows 复制到副本时产生的 “xxxV.2026_0706_163543 - 副本”）。
+var reVersion = regexp.MustCompile(`V\.\d{4}_\d{4}_\d{6}`)
 
 // versionSuffix 返回当前时间的版本后缀，如 V.2026_0706_113500
 func versionSuffix(t time.Time) string {
@@ -34,12 +36,26 @@ func versionSuffix(t time.Time) string {
 }
 
 // newName 根据原路径计算带版本后缀的新路径。
-// 若原文件名已含版本后缀，则先移除旧后缀再加新的（实现“更新”语义）。
+// 规则：
+//   - 若文件名任意位置已含版本号 V.YYYY_MMDD_HHMMSS，则从该版本号处截断
+//     （同时丢弃其后可能附带的 “ - 副本” 或旧版本号），替换为最新的版本号
+//     —— 实现“更新”语义，并自愈已存在的双版本坏文件；
+//   - 否则直接在末尾追加最新的版本号。
+//
+// 例如：
+//   新建文本文档V.2026_0706_163543 - 副本.txt  →  新建文本文档V.2026_0706_163550.txt
+//   报告-6月.docx                              →  报告-6月V.2026_0706_163550.docx
 func newName(path string) string {
 	ext := filepath.Ext(path)
-	name := strings.TrimSuffix(filepath.Base(path), ext)
-	name = reVersion.ReplaceAllString(name, "")
-	return filepath.Join(filepath.Dir(path), name+versionSuffix(time.Now())+ext)
+	stem := strings.TrimSuffix(filepath.Base(path), ext)
+	suffix := versionSuffix(time.Now())
+	if idx := reVersion.FindStringIndex(stem); idx != nil {
+		// 从首个版本号处截断，丢弃其后所有可能的内容（旧版本 / “ - 副本” 等）
+		stem = stem[:idx[0]] + suffix
+	} else {
+		stem = stem + suffix
+	}
+	return filepath.Join(filepath.Dir(path), stem+ext)
 }
 
 // copyFile 逐块复制文件内容（支持大文件）。
