@@ -25,10 +25,12 @@ import (
 	"unsafe"
 )
 
-// 版本后缀正则。例如 V.2026_0706_113500（精确到秒）。
+// 版本后缀正则。支持两种精度，以兼容不同历史版本工具生成的文件：
+//   - 精确到秒：V.YYYY_MMDD_HHMMSS （6 位，如 V.2026_0706_113500）
+//   - 精确到分：V.YYYY_MMDD_HHMM   （4 位，如 V.2026_0622_1651，旧版工具生成的）
 // 注意：不匹配行尾 $，以便识别“文件名中间”已存在的版本号
 // （如 Windows 复制到副本时产生的 “xxxV.2026_0706_163543 - 副本”）。
-var reVersion = regexp.MustCompile(`V\.\d{4}_\d{4}_\d{6}`)
+var reVersion = regexp.MustCompile(`V\.\d{4}_\d{4}_\d{4,6}`)
 
 // versionSuffix 返回当前时间的版本后缀，如 V.2026_0706_113500
 func versionSuffix(t time.Time) string {

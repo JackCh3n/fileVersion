@@ -77,6 +77,7 @@ fileversion.exe move  "报告.docx"       # 重命名并加版本后缀（已存
 ## 关于时间戳精度
 
 默认精确到**秒**，后缀形如 `V.2026_0706_113500`（YYYY_MMDD_HHMMSS）。
-如需只精确到**分**，把 `main.go` 中 `versionSuffix` 的
-`time.Format("2006_0102_150405")` 改回 `time.Format("2006_0102_1504")`，
-并把 `reVersion` 正则末尾的 `\d{6}` 改回 `\d{4}`，重新 `build.bat` 即可。
+
+识别正则同时兼容两种历史精度：
+`V.YYYY_MMDD_HHMMSS`（6 位，当前版本）与 `V.YYYY_MMDD_HHMM`（4 位，早期版本生成的旧文件），
+因此对任意历史文件执行 copy / move 都不会叠加出第二个 `V.`，而是把旧时间戳更新为最新值。

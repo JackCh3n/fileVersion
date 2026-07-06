@@ -79,6 +79,29 @@ func TestNewNameUpdateWithCopySuffix(t *testing.T) {
 	}
 }
 
+// TestNewNameCopyAlreadyVersioned 复现并验证 copy 的同类 bug：
+// 源文件已带版本号时，copy 不应再叠加出第二个 V.，而应更新为单一最新版本号。
+func TestNewNameCopyAlreadyVersioned(t *testing.T) {
+	p := `C:\tmp\一体化平台项目重保报告-0619-端午V.2026_0622_1651.docx`
+	n := newName(p)
+	if !strings.HasSuffix(n, ".docx") {
+		t.Fatalf("扩展名丢失: %s", n)
+	}
+	base := filepath.Base(n)
+	if !strings.Contains(base, "一体化平台项目重保报告-0619-端午V.") {
+		t.Fatalf("前缀或版本标记被破坏: %s", base)
+	}
+	// 必须只有一个 V.，不能出现 V.xxxV.yyy
+	first := strings.Index(base, "V.")
+	if strings.Contains(base[first+1:], "V.") {
+		t.Fatalf("copy 出现后缀叠加: %s", base)
+	}
+	// 旧时间戳 2026_0622_1651 应被更新掉
+	if strings.Contains(base, "2026_0622_1651") {
+		t.Fatalf("旧时间戳应被更新: %s", base)
+	}
+}
+
 func TestCopyAndMove(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "月度报告-6月.docx")
