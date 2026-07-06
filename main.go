@@ -5,7 +5,8 @@
 // 功能：
 //   copy  复制文件，并在文件名后追加版本后缀 V.YYYY_MMDD_HHMMSS
 //   move  重命名文件，追加版本后缀（若已存在则更新该后缀）
-//   install  安装到当前用户，并在“发送到”菜单创建 FileCopy / FileMove 两个快捷方式
+//   clean 整理文件名：去掉 Windows 复制计数 (N)，并把文件名中的日期规整为 V.YYYY_MM_DD
+//   install  安装到当前用户，并在“发送到”菜单创建 FileCopy / FileMove / FileClean 快捷方式
 //   uninstall  卸载，移除快捷方式与安装目录
 //
 // 版本后缀示例：V.2026_0706_113500（精确到秒）
@@ -58,6 +59,92 @@ func newName(path string) string {
 		stem = stem + suffix
 	}
 	return filepath.Join(filepath.Dir(path), stem+ext)
+}
+
+// ---- 整理（clean）模式：把 “名称 - 日期(N)” 这类杂乱文件名规整为 “名称V.YYYY_MM_DD” ----
+
+// reCounter 匹配 Windows 复制产生的末尾计数，如 (1) (2)
+var reCounter = regexp.MustCompile(`\(\d+\)\s*$`)
+
+// reDate 匹配文件名中任意位置的日期（兼容 20260604 / 2026-06-04 / 2026_06_04 / 2026/06/04）
+var reDate = regexp.MustCompile(`20\d{2}[-_/.]?\d{2}[-_/.]?\d{2}`)
+
+// reTrailingV 匹配文件名末尾已有的 V. 版本标记，用于识别“已经规整过”的文件
+var reTrailingV = regexp.MustCompile(`V\.\d[\d_]+$`)
+
+// normalizeDate 把任意分隔符的 8 位日期统一为 YYYY_MM_DD。
+// 例如 20260604 / 2026-06-04 / 2026/06/04 都返回 2026_06_04。
+func normalizeDate(raw string) string {
+	var d []rune
+	for _, r := range raw {
+		if r >= '0' && r <= '9' {
+			d = append(d, r)
+		}
+	}
+	if len(d) != 8 {
+		return ""
+	}
+	return string(d[0:4]) + "_" + string(d[4:6]) + "_" + string(d[6:8])
+}
+
+// cleanName 计算“整理”后的目标路径：
+//
+//	周例会相关工作汇报 - 20260604(1).docx  →  周例会相关工作汇报V.2026_06_04.docx
+//	信息安全自查(1).doc                    →  信息安全自查.doc
+//
+// 规则：
+//  1. 去掉末尾的 Windows 复制计数 (N)；
+//  2. 若去掉 (N) 后文件名已以 V. 版本结尾，则视为已规整，保持该形态（仅去 (N)）；
+//  3. 否则若文件名含日期，则提取为 V.YYYY_MM_DD（并移除原日期文本）；无日期则仅去 (N)。
+func cleanName(path string) string {
+	ext := filepath.Ext(path)
+	stem := strings.TrimSuffix(filepath.Base(path), ext)
+
+	// 1) 去掉 Windows 复制计数 (N)
+	stem = reCounter.ReplaceAllString(stem, "")
+
+	// 2) 去掉 (N) 后若已以 V. 版本结尾 → 已是目标形态，仅保留去 (N) 后的结果
+	if reTrailingV.MatchString(stem) {
+		return filepath.Join(filepath.Dir(path), stem+ext)
+	}
+
+	// 3) 提取日期并转换成 V.YYYY_MM_DD
+	newStem := stem
+	var suffix string
+	if m := reDate.FindString(stem); m != "" {
+		if nd := normalizeDate(m); nd != "" {
+			suffix = "V." + nd
+			newStem = strings.Replace(stem, m, "", 1)
+		}
+	}
+	newStem = strings.TrimRight(newStem, " -_")
+	if suffix != "" {
+		newStem += suffix
+	}
+
+	return filepath.Join(filepath.Dir(path), newStem+ext)
+}
+
+func doClean(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("不支持目录：%s", path)
+	}
+	dest := cleanName(path)
+	if dest == path {
+		// 已经是整洁名称，无需修改
+		return nil
+	}
+	if _, err := os.Stat(dest); err == nil {
+		dest = avoidCollision(dest)
+	}
+	if err := os.Rename(path, dest); err != nil {
+		return fmt.Errorf("重命名失败 %s: %w", path, err)
+	}
+	return nil
 }
 
 // copyFile 逐块复制文件内容（支持大文件）。
@@ -149,8 +236,9 @@ const (
 
 // “发送到”菜单中的快捷方式名称
 const (
-	linkCopy = "FileCopy.lnk"
-	linkMove = "FileMove.lnk"
+	linkCopy  = "FileCopy.lnk"
+	linkMove  = "FileMove.lnk"
+	linkClean = "FileClean.lnk"
 )
 
 func msgBox(title, text string) {
@@ -267,12 +355,16 @@ func doInstall() error {
 	if err := createShortcut(sendTo, linkMove, destExe, "move"); err != nil {
 		return err
 	}
+	if err := createShortcut(sendTo, linkClean, destExe, "clean"); err != nil {
+		return err
+	}
 
 	msgBox("FileVersion 安装完成",
 		"已安装到：\n"+destExe+
 			"\n\n右键文件 → 发送到 中已出现：\n"+
 			"• FileCopy（复制并加版本号）\n"+
-			"• FileMove（重命名加版本号）")
+			"• FileMove（重命名加版本号）\n"+
+			"• FileClean（整理文件名：去 (N)、把日期规整为 V.YYYY_MM_DD）")
 	return nil
 }
 
@@ -319,6 +411,7 @@ func doUninstall() error {
 	links := []string{
 		filepath.Join(sendTo, linkCopy),
 		filepath.Join(sendTo, linkMove),
+		filepath.Join(sendTo, linkClean),
 		filepath.Join(sendTo, "复制并加版本号(FileVersion).lnk"),
 		filepath.Join(sendTo, "重命名加版本号(FileVersion).lnk"),
 	}
@@ -361,8 +454,9 @@ func main() {
 				"  fileversion.exe install          安装到本用户并创建“发送到”菜单\n"+
 				"  fileversion.exe uninstall        卸载（移除快捷方式与安装目录）\n"+
 				"  fileversion.exe copy  <文件>     复制文件并加版本后缀\n"+
-				"  fileversion.exe move  <文件>     重命名文件加版本后缀（已存在则更新）\n\n"+
-				"安装后，右键文件 → 发送到 即可使用（FileCopy / FileMove），支持多文件。")
+				"  fileversion.exe move  <文件>     重命名文件加版本后缀（已存在则更新）\n"+
+				"  fileversion.exe clean <文件>     整理文件名：去 (N)、把日期规整为 V.YYYY_MM_DD\n\n"+
+				"安装后，右键文件 → 发送到 即可使用（FileCopy / FileMove / FileClean），支持多文件。")
 		return
 	}
 
@@ -380,7 +474,7 @@ func main() {
 			msgBoxErr("FileVersion 卸载失败", err.Error())
 		}
 		return
-	case "copy", "move":
+	case "copy", "move", "clean":
 		if len(files) == 0 {
 			notify("FileVersion", "未提供文件。请右键文件 → 发送到 使用。", false)
 			return
@@ -389,10 +483,13 @@ func main() {
 		var errs []string
 		for _, f := range files {
 			var err error
-			if mode == "copy" {
+			switch mode {
+			case "copy":
 				err = doCopy(f)
-			} else {
+			case "move":
 				err = doMove(f)
+			case "clean":
+				err = doClean(f)
 			}
 			if err != nil {
 				fail++
@@ -413,6 +510,6 @@ func main() {
 			notify("FileVersion 完成", fmt.Sprintf("已成功处理 %d 个文件。", ok), false)
 		}
 	default:
-		msgBox("FileVersion", "未知命令："+mode+"\n请使用 install / uninstall / copy / move。")
+		msgBox("FileVersion", "未知命令："+mode+"\n请使用 install / uninstall / copy / move / clean。")
 	}
 }

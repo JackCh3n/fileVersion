@@ -102,6 +102,61 @@ func TestNewNameCopyAlreadyVersioned(t *testing.T) {
 	}
 }
 
+// TestCleanName 覆盖 clean 模式的典型场景（含用户给出的真实用例）。
+func TestCleanName(t *testing.T) {
+	cases := []struct {
+		in   string // 输入（Windows 风格路径，仅用于断言基名）
+		want string // 期望的完整目标路径
+	}{
+		// 用户用例 1：带日期 + (N) → 日期规整为 V.YYYY_MM_DD，去掉 (N)
+		{`C:\a\周例会相关工作汇报 - 20260604(1).docx`, `C:\a\周例会相关工作汇报V.2026_06_04.docx`},
+		{`C:\a\周例会相关工作汇报 - 20260604(2).docx`, `C:\a\周例会相关工作汇报V.2026_06_04.docx`},
+		// 用户用例 2：无日期，仅 (N) → 只去掉 (N)
+		{`C:\a\信息安全自查(1).doc`, `C:\a\信息安全自查.doc`},
+		{`C:\a\信息安全自查(2).doc`, `C:\a\信息安全自查.doc`},
+		// 带分隔符的日期同样能识别（注：文件名中不会出现 /，用 . 演示非默认分隔符）
+		{`C:\a\周报 - 2026-06-04(3).docx`, `C:\a\周报V.2026_06_04.docx`},
+		{`C:\a\周报 - 2026.06.04(1).docx`, `C:\a\周报V.2026_06_04.docx`},
+		// 无 (N) 但含日期 → 同样规整
+		{`C:\a\周例会相关工作汇报 - 20260604.docx`, `C:\a\周例会相关工作汇报V.2026_06_04.docx`},
+		// 已经是规整形态（末尾 V.）→ 保持不变（不再叠加）
+		{`C:\a\周例会相关工作汇报V.2026_06_04.docx`, `C:\a\周例会相关工作汇报V.2026_06_04.docx`},
+		// 已是规整形态但多了 (N) → 去 (N) 保留 V.
+		{`C:\a\周例会相关工作汇报V.2026_06_04(1).docx`, `C:\a\周例会相关工作汇报V.2026_06_04.docx`},
+	}
+	for _, c := range cases {
+		got := cleanName(c.in)
+		if got != c.want {
+			t.Errorf("cleanName(%q)\n  got = %q\n  want= %q", c.in, got, c.want)
+		}
+		// 绝不能出现双 V.
+		base := filepath.Base(got)
+		first := strings.Index(base, "V.")
+		if first >= 0 && strings.Contains(base[first+1:], "V.") {
+			t.Errorf("出现双 V. 叠加: %q", base)
+		}
+	}
+}
+
+// TestCleanDo 在真实文件系统上验证 doClean 的改名行为。
+func TestCleanDo(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "周例会相关工作汇报 - 20260604(1).docx")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := doClean(src); err != nil {
+		t.Fatalf("doClean: %v", err)
+	}
+	want := filepath.Join(dir, "周例会相关工作汇报V.2026_06_04.docx")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("clean 后未得到期望文件 %s: %v", want, err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("clean 后原文件应已被改名: %s", src)
+	}
+}
+
 func TestCopyAndMove(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "月度报告-6月.docx")
