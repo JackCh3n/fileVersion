@@ -9,7 +9,7 @@
 支持 Win7 / Win10 / Win11，支持中文路径，支持中文/英文/数字用户名（gm、zhangshan、张德顺……），
 按当前用户 `%APPDATA%` / `%LOCALAPPDATA%` 自动解析，无需管理员权限。
 
-> **通知方式**：Win10 / Win11 通过右下角 **Action Center（操作中心）** 弹出通知；**Win7 没有 Action Center，直接静默**（不弹窗、也不回退到其他提示）。**成功与失败都会通知**（失败提示首个出错文件）。
+> **通知方式**：安装 / 卸载 / 用法说明仍使用系统默认弹窗；**仅文件改名（copy / move）的成功与失败**走 Win10 / Win11 右下角 **Action Center（操作中心）** 通知（Win7 静默）。通知来源显示为“FileVersion”，无需下载任何控件（通过系统自带 PowerShell + 注册表 AppUserModelId 实现）。
 
 ---
 
