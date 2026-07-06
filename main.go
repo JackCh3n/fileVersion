@@ -18,10 +18,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 // 已存在的版本后缀（用于 move 时更新）。例如 V.2026_0706_113500（精确到秒）
@@ -115,18 +115,7 @@ func doMove(path string) error {
 	return nil
 }
 
-// ---- Windows 消息框 ----
-
-var (
-	user32          = syscall.NewLazyDLL("user32.dll")
-	procMessageBoxW = user32.NewProc("MessageBoxW")
-)
-
-const (
-	mbOKOnly    = 0x00000000
-	mbIconInfo  = 0x00000040
-	mbIconError = 0x00000010
-)
+// ---- Windows 通知（Win10/11 Action Center） ----
 
 // “发送到”菜单中的快捷方式名称
 const (
@@ -134,22 +123,52 @@ const (
 	linkMove = "FileMove.lnk"
 )
 
-func msgBox(title, text string) {
-	procMessageBoxW.Call(
-		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(text))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
-		uintptr(mbOKOnly|mbIconInfo),
-	)
-}
+// notify 在 Win10/11 上通过右下角 Action Center 弹出通知；Win7 没有 Action Center，
+// 直接静默（不弹窗、也不回退到其它提示）。非 Windows 环境同样静默。
+//
+// 实现：调用系统自带的 PowerShell 加载 WinRT 的 ToastNotificationManager 显示通知，
+// 不依赖任何第三方库。Win7 上 WinRT 类型不可用，脚本会抛错，此处忽略即可（即静默）。
+func notify(title, message string, isError bool) {
+	if runtime.GOOS != "windows" {
+		return
+	}
 
-func msgBoxErr(title, text string) {
-	procMessageBoxW.Call(
-		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(text))),
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
-		uintptr(mbOKOnly|mbIconError),
-	)
+	// 文案清洗：换行替换为空格，过长截断（Action Center 文本容量有限）
+	msg := strings.TrimSpace(message)
+	msg = strings.ReplaceAll(msg, "\r\n", " ")
+	msg = strings.ReplaceAll(msg, "\n", " ")
+	if len([]rune(msg)) > 240 {
+		msg = string([]rune(msg)[:240]) + "…"
+	}
+
+	const script = `param($Title, $Message)
+try {
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+  $tpl = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+  $txt = $tpl.GetElementsByTagName('text')
+  $txt.Item(0).AppendChild($tpl.CreateTextNode($Title)) | Out-Null
+  $txt.Item(1).AppendChild($tpl.CreateTextNode($Message)) | Out-Null
+  $appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($tpl)
+  Start-Sleep -Milliseconds 300
+} catch { exit 1 }`
+
+	tmp, err := os.CreateTemp("", "fv-toast-*.ps1")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.WriteString(script); err != nil {
+		tmp.Close()
+		return
+	}
+	tmp.Close()
+
+	cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-STA",
+		"-File", tmpName, "-Title", title, "-Message", msg)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Run() // 忽略错误：Win7 或组策略禁用通知时静默
 }
 
 // ---- 安装（创建“发送到”快捷方式） ----
@@ -189,11 +208,9 @@ func doInstall() error {
 		return err
 	}
 
-	msgBox("FileVersion 安装完成",
-		"已安装到：\n"+destExe+
-			"\n\n右键文件 → 发送到 中已出现：\n"+
-			"• FileCopy（复制并加版本号）\n"+
-			"• FileMove（重命名加版本号）")
+	notify("FileVersion 安装完成",
+		"已安装到 "+destExe+"\n右键文件 → 发送到 中已出现：FileCopy（复制加版本号）、FileMove（重命名加版本号）",
+		false)
 	return nil
 }
 
@@ -262,8 +279,8 @@ func doUninstall() error {
 	if len(errs) > 0 {
 		return fmt.Errorf("部分清理失败：\n%s", strings.Join(errs, "\n"))
 	}
-	msgBox("FileVersion 卸载完成",
-		"已移除：\n• SendTo 中的 FileCopy / FileMove 快捷方式\n• 安装目录 "+installDir)
+	notify("FileVersion 卸载完成",
+		"已移除 SendTo 中的 FileCopy / FileMove 快捷方式与安装目录 "+installDir, false)
 	return nil
 }
 
@@ -272,18 +289,14 @@ func doUninstall() error {
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			msgBoxErr("FileVersion 错误", fmt.Sprintf("发生异常：%v", r))
+			notify("FileVersion 错误", fmt.Sprintf("发生异常：%v", r), true)
 		}
 	}()
 
 	if len(os.Args) < 2 {
-		msgBox("FileVersion 使用说明",
-			"用法：\n"+
-				"  fileversion.exe install          安装到本用户并创建“发送到”菜单\n"+
-				"  fileversion.exe uninstall        卸载（移除快捷方式与安装目录）\n"+
-				"  fileversion.exe copy  <文件>     复制文件并加版本后缀\n"+
-				"  fileversion.exe move  <文件>     重命名文件加版本后缀（已存在则更新）\n\n"+
-				"安装后，右键文件 → 发送到 即可使用（FileCopy / FileMove），支持多文件。")
+		notify("FileVersion 使用说明",
+			"用法：fileversion.exe install 安装（创建“发送到”菜单）；uninstall 卸载；copy <文件> 复制并加版本后缀；move <文件> 重命名加版本后缀（已存在则更新）。安装后右键文件 → 发送到 即可使用（FileCopy / FileMove），支持多文件。",
+			false)
 		return
 	}
 
@@ -293,17 +306,17 @@ func main() {
 	switch mode {
 	case "install":
 		if err := doInstall(); err != nil {
-			msgBoxErr("FileVersion 安装失败", err.Error())
+			notify("FileVersion 安装失败", err.Error(), true)
 		}
 		return
 	case "uninstall":
 		if err := doUninstall(); err != nil {
-			msgBoxErr("FileVersion 卸载失败", err.Error())
+			notify("FileVersion 卸载失败", err.Error(), true)
 		}
 		return
 	case "copy", "move":
 		if len(files) == 0 {
-			msgBox("FileVersion", "未提供文件。请右键文件 → 发送到 使用。")
+			notify("FileVersion", "未提供文件。请右键文件 → 发送到 使用。", false)
 			return
 		}
 		ok, fail := 0, 0
@@ -322,12 +335,18 @@ func main() {
 				ok++
 			}
 		}
-		// 成功时静默，不弹窗；仅在出现失败时提示
+		// Win10/11 走右下角 Action Center 通知；Win7 静默（无 Action Center，不回退）
 		if fail > 0 {
-			msgBoxErr("FileVersion 完成（有失败）",
-				fmt.Sprintf("成功 %d，失败 %d：\n\n%s", ok, fail, strings.Join(errs, "\n")))
+			first := ""
+			if len(errs) > 0 {
+				first = strings.SplitN(errs[0], "\n", 2)[0]
+			}
+			notify("FileVersion 完成（有失败）",
+				fmt.Sprintf("成功 %d，失败 %d。首个失败：%s", ok, fail, first), true)
+		} else if ok > 0 {
+			notify("FileVersion 完成", fmt.Sprintf("已成功处理 %d 个文件。", ok), false)
 		}
 	default:
-		msgBox("FileVersion", "未知命令："+mode+"\n请使用 install / uninstall / copy / move。")
+		notify("FileVersion", "未知命令："+mode+"\n请使用 install / uninstall / copy / move。", false)
 	}
 }
