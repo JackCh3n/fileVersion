@@ -22,7 +22,7 @@ type RevertEntry struct {
 // WriteRevertLog 把执行结果写入撤销日志文件（默认 %APPDATA%/FileVersion/revert.json）。
 func WriteRevertLog(results []Result, logPath string) error {
 	if logPath == "" {
-		logPath = defaultRevertPath()
+		logPath = DefaultRevertPath()
 	}
 	entries := make([]RevertEntry, 0, len(results))
 	for _, r := range results {
@@ -46,8 +46,8 @@ func WriteRevertLog(results []Result, logPath string) error {
 	return os.WriteFile(logPath, data, 0o644)
 }
 
-// defaultRevertPath 默认撤销日志路径。
-func defaultRevertPath() string {
+// DefaultRevertPath 默认撤销日志路径（%APPDATA%/FileVersion/revert.json）。
+func DefaultRevertPath() string {
 	dir := os.Getenv("APPDATA")
 	if dir == "" {
 		dir = os.TempDir()
@@ -58,7 +58,7 @@ func defaultRevertPath() string {
 // RevertLast 读取撤销日志，把 New→Old 还原。返回成功还原的条数。
 func RevertLast(logPath string) (int, error) {
 	if logPath == "" {
-		logPath = defaultRevertPath()
+		logPath = DefaultRevertPath()
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {

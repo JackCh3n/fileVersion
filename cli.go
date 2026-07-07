@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"fileversion/renamer"
 	"fileversion/shell"
 )

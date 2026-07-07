@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -26,7 +27,7 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
-		OnStartup: func(ctx *wails.Context) {
+		OnStartup: func(ctx context.Context) {
 			// 可在此注入 ctx（如需从 Go 主动调用 JS）
 		},
 		Bind: []interface{}{
