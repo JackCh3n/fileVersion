@@ -9,79 +9,108 @@
 <body>
   <div id="app">
     <header class="titlebar">
-      <span class="logo">FV</span>
-      <span class="title">批量文件改名</span>
+      <div class="brand">
+        <span class="logo">FV</span>
+        <div class="brand-text">
+          <span class="title">FileVersion 批量改名</span>
+          <span class="subtitle">快速、安全地批量重命名文件</span>
+        </div>
+      </div>
       <span class="spacer"></span>
-      <button class="btn-mini" id="btnInstall">安装右键菜单</button>
-      <button class="btn-mini" id="btnUninstall">卸载</button>
-      <button class="btn-mini" id="btnRevert">撤销上次</button>
+      <button class="btn-ghost" id="btnInstall">安装右键菜单</button>
+      <button class="btn-ghost" id="btnUninstall">卸载</button>
+      <button class="btn-ghost" id="btnRevert">撤销上次</button>
     </header>
 
     <div class="main">
       <!-- 左侧控制区 -->
       <aside class="panel">
-        <div class="tabs">
+        <nav class="tabs">
           <button class="tab active" data-tab="overall">整体</button>
           <button class="tab" data-tab="replace">替换</button>
           <button class="tab" data-tab="addremove">添加/删除</button>
-        </div>
+        </nav>
 
         <!-- 整体 Tab -->
         <section class="tabpage" data-page="overall">
-          <label class="field">
-            <span>命名规则</span>
-            <input type="text" id="tplPattern" value="A_#" />
-          </label>
-          <p class="hint">用 <code>*</code> 插入原文件名，<code>#</code> 插入编号。例：<code>A_#</code>→A_001，<code>*V.#</code>→原文件V.01</p>
-          <div class="row">
-            <label class="field small"><span>开始于</span><input type="number" id="tplStart" value="1" /></label>
-            <label class="field small"><span>增量</span><input type="number" id="tplInc" value="1" /></label>
-            <label class="field small"><span>位数</span><input type="number" id="tplDigits" value="3" /></label>
-          </div>
-          <div class="row">
-            <label class="field small"><span>补齐符</span>
-              <select id="tplPad"><option value="0">0</option><option value=" ">空格</option></select>
+          <div class="group">
+            <div class="group-title">命名规则</div>
+            <label class="field">
+              <span>命名模板</span>
+              <input type="text" id="tplPattern" value="A_#" />
             </label>
-            <label class="check"><input type="checkbox" id="tplRandom" /> 随机编号</label>
-            <label class="check"><input type="checkbox" id="tplRandomLower" /> 小写</label>
+            <p class="hint">用 <code>*</code> 插入原文件名，<code>#</code> 插入编号。例如 <code>A_#</code> → A_001，<code>*V.#</code> → 原文件V.01</p>
+            <div class="row">
+              <label class="field small"><span>起始</span><input type="number" id="tplStart" value="1" /></label>
+              <label class="field small"><span>增量</span><input type="number" id="tplInc" value="1" /></label>
+              <label class="field small"><span>位数</span><input type="number" id="tplDigits" value="3" /></label>
+            </div>
+            <div class="row">
+              <label class="field small">
+                <span>补齐符</span>
+                <select id="tplPad"><option value="0">0</option><option value=" ">空格</option></select>
+              </label>
+              <label class="check"><input type="checkbox" id="tplRandom" /> 随机</label>
+              <label class="check"><input type="checkbox" id="tplRandomLower" /> 小写</label>
+            </div>
+            <label class="field">
+              <span>扩展名改成</span>
+              <input type="text" id="tplExt" placeholder="留空 = 不改变" />
+            </label>
           </div>
-          <label class="field">
-            <span>扩展名改成</span>
-            <input type="text" id="tplExt" placeholder="留空=不改" />
-          </label>
-          <label class="check"><input type="checkbox" id="optClean" /> clean 整理（去(N)、日期规整V.日期）</label>
-          <label class="check"><input type="checkbox" id="optVersion" /> 追加版本号 V.时间戳</label>
-          <label class="check"><input type="checkbox" id="optVersionMove" /> 原地改名(move) 而非复制(copy)</label>
-          <label class="field">
-            <span>冲突处理</span>
-            <select id="conflict">
-              <option value="auto">自动编号避免冲突</option>
-              <option value="skip">跳过冲突文件</option>
-              <option value="overwrite">覆盖已存在文件</option>
-            </select>
-          </label>
+
+          <div class="group">
+            <div class="group-title">附加操作</div>
+            <label class="check"><input type="checkbox" id="optClean" /> clean 整理（去 (N)、日期规整为 V.日期）</label>
+            <label class="check"><input type="checkbox" id="optVersion" /> 追加版本号 V.时间戳</label>
+            <label class="check"><input type="checkbox" id="optVersionMove" /> 原地改名(move) 而非复制(copy)</label>
+          </div>
+
+          <div class="group">
+            <div class="group-title">冲突处理</div>
+            <label class="field">
+              <span>目标文件已存在时</span>
+              <select id="conflict">
+                <option value="auto">自动编号避免冲突</option>
+                <option value="skip">跳过冲突文件</option>
+                <option value="overwrite">覆盖已存在文件</option>
+              </select>
+            </label>
+          </div>
         </section>
 
         <!-- 替换 Tab -->
         <section class="tabpage hidden" data-page="replace">
-          <label class="field"><span>把</span><input type="text" id="repFind" /></label>
-          <label class="field"><span>替换成</span><input type="text" id="repReplace" /></label>
-          <label class="check"><input type="checkbox" id="repRegex" /> 使用正则</label>
-          <label class="check"><input type="checkbox" id="repIgnore" /> 忽略大小写</label>
+          <div class="group">
+            <div class="group-title">查找 / 替换</div>
+            <label class="field"><span>查找内容</span><input type="text" id="repFind" placeholder="要被替换的文字或正则" /></label>
+            <label class="field"><span>替换为</span><input type="text" id="repReplace" placeholder="留空 = 删除查找内容" /></label>
+            <label class="check"><input type="checkbox" id="repRegex" /> 使用正则表达式</label>
+            <label class="check"><input type="checkbox" id="repIgnore" /> 忽略大小写</label>
+          </div>
         </section>
 
         <!-- 添加/删除 Tab -->
         <section class="tabpage hidden" data-page="addremove">
-          <label class="field"><span>文件名前添加</span><input type="text" id="arPrefix" /></label>
-          <label class="field"><span>文件名后添加</span><input type="text" id="arSuffix" /></label>
-          <div class="row">
-            <label class="field small"><span>插入位置</span><input type="number" id="arInsertAt" value="0" /></label>
-            <label class="field"><span>插入内容</span><input type="text" id="arInsertStr" /></label>
+          <div class="group">
+            <div class="group-title">前后缀</div>
+            <label class="field"><span>文件名前添加</span><input type="text" id="arPrefix" placeholder="例如：备份_" /></label>
+            <label class="field"><span>文件名后添加</span><input type="text" id="arSuffix" placeholder="例如：_final" /></label>
           </div>
-          <label class="field"><span>删除子串</span><input type="text" id="arRemoveStr" /></label>
-          <div class="row">
-            <label class="field small"><span>删除起始</span><input type="number" id="arRemoveFrom" value="0" /></label>
-            <label class="field small"><span>删除个数</span><input type="number" id="arRemoveCount" value="0" /></label>
+          <div class="group">
+            <div class="group-title">指定位置插入</div>
+            <div class="row">
+              <label class="field small"><span>插入位置</span><input type="number" id="arInsertAt" value="0" /></label>
+              <label class="field"><span>插入内容</span><input type="text" id="arInsertStr" placeholder="插入的文字" /></label>
+            </div>
+          </div>
+          <div class="group">
+            <div class="group-title">删除字符</div>
+            <label class="field"><span>删除子串</span><input type="text" id="arRemoveStr" placeholder="含此文字即删除" /></label>
+            <div class="row">
+              <label class="field small"><span>删除起始</span><input type="number" id="arRemoveFrom" value="0" /></label>
+              <label class="field small"><span>删除个数</span><input type="number" id="arRemoveCount" value="0" /></label>
+            </div>
           </div>
         </section>
       </aside>
@@ -101,7 +130,13 @@
             </thead>
             <tbody id="fileBody"></tbody>
           </table>
-          <div class="dropzone" id="dropzone">拖拽文件到此处，或点击“添加”</div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-inner">
+              <div class="dz-icon">⬇</div>
+              <div class="dz-text">拖拽文件到此处</div>
+              <div class="dz-sub">或点击左上角“添加”按钮</div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
