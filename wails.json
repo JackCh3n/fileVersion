@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "FileVersion",
+  "outputfilename": "fileversion.exe",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "FileVersion",
+    "email": ""
+  },
+  "info": {
+    "companyName": "FileVersion",
+    "productName": "FileVersion 批量改名",
+    "productVersion": "1.0.0",
+    "copyright": "© 2026 FileVersion"
+  }
+}

@@ -1,0 +1,107 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f4f4f4;
+  --panel: #ececec;
+  --border: #b7b7b7;
+  --accent: #2f6db0;
+  --accent-d: #22538a;
+  --text: #222;
+  --muted: #666;
+  --ok: #2e7d32;
+  --warn: #c62828;
+}
+html, body { height: 100%; }
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", Tahoma, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  user-select: none;
+}
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* 标题栏 */
+.titlebar {
+  display: flex; align-items: center; gap: 8px;
+  background: linear-gradient(180deg, #3a7bd5, #2f6db0);
+  color: #fff; padding: 6px 12px;
+}
+.titlebar .logo {
+  background: #fff; color: var(--accent); font-weight: 700;
+  border-radius: 4px; padding: 1px 6px; font-size: 12px;
+}
+.titlebar .title { font-weight: 600; }
+.titlebar .spacer { flex: 1; }
+.btn-mini {
+  background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.4);
+  border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.btn-mini:hover { background: rgba(255,255,255,.3); }
+
+.main { flex: 1; display: flex; min-height: 0; }
+
+/* 左侧面板 */
+.panel {
+  width: 320px; min-width: 320px; background: var(--panel);
+  border-right: 1px solid var(--border); padding: 10px; overflow-y: auto;
+}
+.tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.tab {
+  flex: 1; padding: 7px 0; border: 1px solid var(--border); background: #fff;
+  cursor: pointer; border-radius: 4px 4px 0 0; font-size: 13px;
+}
+.tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tabpage { background: #fff; border: 1px solid var(--border); border-top: none; padding: 12px; border-radius: 0 0 4px 4px; }
+.tabpage.hidden { display: none; }
+
+.field { display: flex; flex-direction: column; margin-bottom: 10px; gap: 3px; }
+.field > span { color: var(--muted); font-size: 12px; }
+.field input, .field select {
+  padding: 5px 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px;
+}
+.field.small { flex: 1; }
+.row { display: flex; gap: 8px; margin-bottom: 8px; }
+.check { display: flex; align-items: center; gap: 5px; margin: 6px 0; font-size: 12px; }
+.hint { font-size: 11px; color: var(--muted); margin: -4px 0 10px; line-height: 1.5; }
+.hint code { background: #eef; padding: 0 3px; border-radius: 3px; }
+
+/* 右侧文件区 */
+.files { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 10px; }
+.filebar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.filebar button {
+  padding: 5px 12px; border: 1px solid var(--border); background: #fff;
+  border-radius: 4px; cursor: pointer;
+}
+.filebar button:hover { background: #eaf2fb; }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+.tablewrap { flex: 1; overflow: auto; border: 1px solid var(--border); background: #fff; position: relative; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #eee; }
+th { background: #f0f0f0; position: sticky; top: 0; z-index: 1; }
+.col-old { width: 38%; }
+.col-prev { width: 34%; }
+.col-res { width: 28%; }
+tbody tr:hover { background: #f5f9ff; }
+td.prev { color: var(--accent-d); }
+td.res-ok { color: var(--ok); }
+td.res-skip { color: var(--warn); }
+.dropzone {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); pointer-events: none; font-size: 14px;
+}
+.dropzone.hidden { display: none; }
+
+/* 状态栏 */
+.statusbar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+  background: var(--panel); border-top: 1px solid var(--border);
+}
+.statusbar .spacer { flex: 1; }
+#statusText { color: var(--muted); font-size: 12px; }
+.btn-primary {
+  background: var(--accent); color: #fff; border: none; padding: 6px 18px;
+  border-radius: 4px; cursor: pointer; font-weight: 600;
+}
+.btn-primary:hover { background: var(--accent-d); }
+#btnHelp { padding: 6px 14px; border: 1px solid var(--border); background: #fff; border-radius: 4px; cursor: pointer; }
