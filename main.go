@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,41 +62,73 @@ func newName(path string) string {
 	return filepath.Join(filepath.Dir(path), stem+ext)
 }
 
-// ---- 整理（clean）模式：把 “名称 - 日期(N)” 这类杂乱文件名规整为 “名称V.YYYY_MM_DD” ----
+// ---- 整理（clean）模式：把杂乱文件名规整为 “名称V.YYYY_MM_DD” ----
 
 // reCounter 匹配 Windows 复制产生的末尾计数，如 (1) (2)
 var reCounter = regexp.MustCompile(`\(\d+\)\s*$`)
 
-// reDate 匹配文件名中任意位置的日期（兼容 20260604 / 2026-06-04 / 2026_06_04 / 2026/06/04）
-var reDate = regexp.MustCompile(`20\d{2}[-_/.]?\d{2}[-_/.]?\d{2}`)
+// reDateCandidate 匹配“可能是日期”的数字串：20XX 后跟 1~6 组“可选分隔符 + 2 位数字”，
+// 末尾可再跟 1 位可选数字（吸收时间戳尾部偶尔多出的零散数字，如 202504181407035）。
+// 例如 20260604 / 2026-06-04 / 2026.06.04 / 20260616172059 / 202606（仅到月）。
+// 是否真是合法日期，由 validateDate 进一步校验（年 2000-2099、月 1-12、日 1-31），
+// 以免把身份证号、业务单号里的数字串误判为日期。
+var reDateCandidate = regexp.MustCompile(`20\d{2}(?:[-_/. ]?\d{2}){1,6}\d?`)
 
 // reTrailingV 匹配文件名末尾已有的 V. 版本标记，用于识别“已经规整过”的文件
 var reTrailingV = regexp.MustCompile(`V\.\d[\d_]+$`)
 
-// normalizeDate 把任意分隔符的 8 位日期统一为 YYYY_MM_DD。
-// 例如 20260604 / 2026-06-04 / 2026/06/04 都返回 2026_06_04。
-func normalizeDate(raw string) string {
-	var d []rune
-	for _, r := range raw {
+// digitsOf 仅保留字符串中的数字字符
+func digitsOf(s string) string {
+	var b strings.Builder
+	for _, r := range s {
 		if r >= '0' && r <= '9' {
-			d = append(d, r)
+			b.WriteRune(r)
 		}
 	}
-	if len(d) != 8 {
-		return ""
+	return b.String()
+}
+
+// validateDate 从候选串中解析出“日期”部分（仅到日，忽略时分秒），
+// 返回规整后的 “V.YYYY_MM_DD” 或 “V.YYYY_MM（仅到月）”，以及是否合法。
+func validateDate(raw string) (string, bool) {
+	d := digitsOf(raw)
+	if len(d) < 6 {
+		return "", false
 	}
-	return string(d[0:4]) + "_" + string(d[4:6]) + "_" + string(d[6:8])
+	y, _ := strconv.Atoi(d[0:4])
+	if y < 2000 || y > 2099 {
+		return "", false
+	}
+	if len(d) >= 8 {
+		mo, _ := strconv.Atoi(d[4:6])
+		da, _ := strconv.Atoi(d[6:8])
+		if mo >= 1 && mo <= 12 && da >= 1 && da <= 31 {
+			return fmt.Sprintf("V.%04d_%02d_%02d", y, mo, da), true
+		}
+	}
+	if len(d) >= 6 {
+		mo, _ := strconv.Atoi(d[4:6])
+		if mo >= 1 && mo <= 12 {
+			return fmt.Sprintf("V.%04d_%02d", y, mo), true
+		}
+	}
+	return "", false
 }
 
 // cleanName 计算“整理”后的目标路径：
 //
 //	周例会相关工作汇报 - 20260604(1).docx  →  周例会相关工作汇报V.2026_06_04.docx
+//	20250917关于X的函.pdf                  →  关于X的函V.2025_09_17.pdf
+//	202606业务受理信息推送待核实(1).xls    →  业务受理信息推送待核实V.2026_06.xls
+//	20260525000100.xlsx                    →  V.2026_05_25.xlsx
 //	信息安全自查(1).doc                    →  信息安全自查.doc
 //
 // 规则：
 //  1. 去掉末尾的 Windows 复制计数 (N)；
 //  2. 若去掉 (N) 后文件名已以 V. 版本结尾，则视为已规整，保持该形态（仅去 (N)）；
-//  3. 否则若文件名含日期，则提取为 V.YYYY_MM_DD（并移除原日期文本）；无日期则仅去 (N)。
+//  3. 否则若文件名含“合法日期”，则提取为 V.YYYY_MM_DD（或仅到月的 V.YYYY_MM），
+//     并从原位置移除该日期文本（含其后的时分秒），统一放到文件名末尾；
+//     无日期则仅去 (N)。
 func cleanName(path string) string {
 	ext := filepath.Ext(path)
 	stem := strings.TrimSuffix(filepath.Base(path), ext)
@@ -108,16 +141,18 @@ func cleanName(path string) string {
 		return filepath.Join(filepath.Dir(path), stem+ext)
 	}
 
-	// 3) 提取日期并转换成 V.YYYY_MM_DD
+	// 3) 提取首个“合法日期”，转换成 V.YYYY_MM_DD（或 V.YYYY_MM）
 	newStem := stem
 	var suffix string
-	if m := reDate.FindString(stem); m != "" {
-		if nd := normalizeDate(m); nd != "" {
-			suffix = "V." + nd
+	for _, m := range reDateCandidate.FindAllString(stem, -1) {
+		if v, ok := validateDate(m); ok {
+			suffix = v
 			newStem = strings.Replace(stem, m, "", 1)
+			break
 		}
 	}
-	newStem = strings.TrimRight(newStem, " -_")
+	// 清理因移除日期而残留的首尾分隔符 / 空白
+	newStem = strings.Trim(newStem, " -_.")
 	if suffix != "" {
 		newStem += suffix
 	}
